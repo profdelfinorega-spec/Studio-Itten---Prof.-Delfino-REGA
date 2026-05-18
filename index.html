@@ -1,0 +1,1683 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>L'Atelier di Itten - Prof. Delfino REGA</title>
+    <!-- Tailwind CSS per uno stile moderno e reattivo -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Librerie React stabili da CDN -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <!-- Compilatore Babel per JSX nel browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Firebase Compatibile per salvataggio in tempo reale -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col justify-between">
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // --- ESTRAZIONE HOOKS DA REACT GLOBALE ---
+        const { useState, useEffect, useRef } = React;
+
+        // --- DICHIARAZIONE CHIAVE API GLOBALE (Iniezione automatica a runtime) ---
+        const apiKey = ""; 
+
+        // --- CONFIGURAZIONE FIREBASE ROBUSTA (Crash-Proof) ---
+        let db = null;
+        let auth = null;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'itten-game-id';
+
+        try {
+            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                const firebaseConfig = JSON.parse(__firebase_config);
+                firebase.initializeApp(firebaseConfig);
+                auth = firebase.auth();
+                db = firebase.firestore();
+            }
+        } catch (e) {
+            console.warn("Database Cloud non inizializzato. L'applicazione utilizzerà la memoria locale resiliente.");
+        }
+
+        // Dati di riserva offline della classifica
+        const MOCK_LEADERBOARD_INITIAL = [
+            { id: '1', nickname: 'Sofia_Arte', score: 1700 },
+            { id: '2', nickname: 'Marco_Bauhaus', score: 1550 },
+            { id: '3', nickname: 'Luca_Newton', score: 1400 },
+            { id: '4', nickname: 'Elena_Adobe', score: 1250 }
+        ];
+
+        // --- ICONE SVG INTERNE ED ELEGANTI (Risolvono ogni dipendenza esterna) ---
+        const Icon = {
+            Palette: ({ className }) => (
+                <svg className={className || "w-6 h-6"} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-1.245c0-.73-.65-1.155-1.12-1.628zM9.53 16.122a3 3 0 004.94-2.467c0-.262.18-.465.43-.465a1.002 1.002 0 011.002 1.001 4.996 4.996 0 01-.172 1.294m-6.2-1.828a3 3 0 001.26-4.94c.261-.253.649-.172.767.16.242.68.373 1.408.373 2.162A5 5 0 019.53 14.294zM18.75 3a.75.75 0 00-.75.75V4.5h-.75a.75.75 0 000 1.5h.75v.75a.75.75 0 001.5 0V6h.75a.75.75 0 000-1.5h-.75V3.75A.75.75 0 0018.75 3zM20.625 9.75a.75.75 0 00-.75.75v.75h-.75a.75.75 0 000 1.5h.75v.75a.75.75 0 001.5 0v-.75h.75a.75.75 0 000-1.5h-.75v-.75a.75.75 0 00-.75-.75z" />
+                </svg>
+            ),
+            Play: ({ className }) => (
+                <svg className={className || "w-5 h-5 fill-current"} viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                </svg>
+            ),
+            Smile: ({ className }) => (
+                <svg className={className || "w-5 h-5"} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9.75 9.75c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75zm-.375 0h.008v.015h-.008V9.75zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75zm-.375 0h.008v.015h-.008V9.75z" />
+                </svg>
+            ),
+            ShieldAlert: ({ className }) => (
+                <svg className={className || "w-5 h-5"} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+            ),
+            Sparkles: ({ className }) => (
+                <svg className={className || "w-5 h-5"} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 21l-.813-5.096L3 15l5.096-.813L9 9l.813 5.096L15 15l-5.187.904zM18.007 7.007L17 11l-1.007-3.993L12 6l3.993-1.007L17 1l1.007 3.993L22 6l-3.993 1.007z" />
+                </svg>
+            ),
+            MessageSquare: ({ className }) => (
+                <svg className={className || "w-5 h-5"} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+            ),
+            Trophy: ({ className }) => (
+                <svg className={className || "w-5 h-5"} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 18.75h-9m9 0a3 3 0 013 3h-15a3 3 0 013-3m9 0v-3.375c0-.621-.503-1.125-1.125-1.125h-.375a1.125 1.125 0 01-1.125-1.125V11.25m6 7.5v-3.375c0-.621.503-1.125 1.125-1.125h.375a1.125 1.125 0 011.125 1.125V11.25M9 11.25H4.125M7.5 14.25H4.125M20.25 11.25H15M20.25 14.25H16.5" />
+                </svg>
+            ),
+            Brush: ({ className }) => (
+                <svg className={className || "w-4 h-4"} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-1.245c0-.73-.65-1.155-1.12-1.628z" />
+                </svg>
+            ),
+            Eraser: ({ className }) => (
+                <svg className={className || "w-4 h-4"} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+            ),
+            Trash: ({ className }) => (
+                <svg className={className || "w-4 h-4"} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+            ),
+            Refresh: ({ className }) => (
+                <svg className={className || "w-4 h-4"} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                </svg>
+            ),
+            Send: ({ className }) => (
+                <svg className={className || "w-4 h-4"} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                </svg>
+            ),
+            User: ({ className }) => (
+                <svg className={className || "w-4 h-4"} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                </svg>
+            ),
+            Map: ({ className }) => (
+                <svg className={className || "w-5 h-5"} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                </svg>
+            ),
+            Camera: ({ className }) => (
+                <svg className={className || "w-5 h-5"} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+                </svg>
+            ),
+            Check: ({ className }) => (
+                <svg className={className || "w-5 h-5 text-green-500"} fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+            ),
+            X: ({ className }) => (
+                <svg className={className || "w-5 h-5 text-red-500"} fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            ),
+            Clock: ({ className }) => (
+                <svg className={className || "w-5 h-5"} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            ),
+            Target: ({ className }) => (
+                <svg className={className || "w-5 h-5"} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m12.728 12.728l-.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z" />
+                </svg>
+            ),
+            BookOpen: ({ className }) => (
+                <svg className={className || "w-5 h-5"} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+            )
+        };
+
+        // --- FUNZIONE DI SUPPORTO GENERICA PER LE CHIAMATE API GEMINI (Con Backoff Esponenziale integrato) ---
+        const callGemini = async (prompt, systemInstruction = "", schema = null, base64Image = null) => {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+            let contentsParts = [];
+            if (base64Image) {
+                contentsParts.push({
+                    inlineData: {
+                        mimeType: "image/png",
+                        data: base64Image
+                    }
+                });
+            }
+            contentsParts.push({ text: prompt });
+
+            const payload = {
+                contents: [{ role: "user", parts: contentsParts }]
+            };
+
+            if (systemInstruction) {
+                payload.systemInstruction = {
+                    parts: [{ text: systemInstruction }]
+                };
+            }
+
+            if (schema) {
+                payload.generationConfig = {
+                    responseMimeType: "application/json",
+                    responseSchema: schema
+                };
+            }
+
+            let delay = 1000;
+            for (let attempt = 0; attempt < 5; attempt++) {
+                try {
+                    const response = await fetch(url, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload)
+                    });
+                    if (response.ok) {
+                        const result = await response.json();
+                        return result;
+                    }
+                } catch (err) {
+                    // Fail silente conformemente alla linea guida sul backoff esponenziale
+                }
+                await new Promise(resolve => setTimeout(resolve, delay));
+                delay *= 2;
+            }
+            throw new Error("Impossibile connettersi al Server AI dell'Atelier. Riprova più tardi.");
+        };
+
+        // --- COMPONENTE APPLICAZIONE PRINCIPALE ---
+        function App() {
+            const [nickname, setNickname] = useState('');
+            const [view, setView] = useState('registration'); 
+            const [level, setLevel] = useState(0);
+            const [score, setScore] = useState(0);
+            const [feedback, setFeedback] = useState(null);
+            const [leaderboard, setLeaderboard] = useState(MOCK_LEADERBOARD_INITIAL);
+
+            // Stati AI e Canvas
+            const [aiBrandDescription, setAiBrandDescription] = useState('');
+            const [aiMood, setAiMood] = useState('Energia e Innovazione');
+            const [isAiLoading, setIsAiLoading] = useState(false);
+            const [aiResponse, setAiResponse] = useState(null);
+            const [aiError, setAiError] = useState(null);
+            const [copiedIndex, setCopiedIndex] = useState(null);
+
+            const [safetyCategory, setSafetyCategory] = useState('Divieto');
+            const [safetyScenario, setSafetyScenario] = useState('');
+            const [isSafetyLoading, setIsSafetyLoading] = useState(false);
+            const [safetyResponse, setSafetyResponse] = useState(null);
+            const [safetyError, setSafetyError] = useState(null);
+
+            const [chatMessages, setChatMessages] = useState([
+                { sender: 'ai', text: "Ciao! Sono il tuo Tutor Virtuale dell'Atelier. Chiedimi pure qualsiasi cosa sui 7 contrasti di Itten, sulla scomposizione ottica, sulla psicologia cromatico-emotiva o su come i grandi brand scelgono le loro palette!" }
+            ]);
+            const [chatInput, setChatInput] = useState('');
+            const [isChatLoading, setIsChatLoading] = useState(false);
+            const chatEndRef = useRef(null);
+
+            const [isDrawingEmojiLoading, setIsDrawingEmojiLoading] = useState(false);
+            const [emojiResponse, setEmojiResponse] = useState(null);
+            const [emojiError, setEmojiError] = useState(null);
+
+            const saveScoreToLeaderboard = async (finalScore) => {
+                const newEntry = { id: 'studente-temp', nickname: nickname || 'Studente', score: finalScore };
+                setLeaderboard(prev => {
+                    const filtered = prev.filter(e => e.id !== 'studente-temp');
+                    return [...filtered, newEntry].sort((a, b) => b.score - a.score).slice(0, 10);
+                });
+
+                if (!auth?.currentUser || !db) return;
+                try {
+                    const lbRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('leaderboard').doc(auth.currentUser.uid);
+                    await lbRef.set({
+                        nickname: nickname,
+                        score: finalScore,
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                } catch (err) {
+                    console.warn("Classifica salvata localmente.");
+                }
+            };
+
+            const handleRegister = (e, chosenNickname) => {
+                e.preventDefault();
+                const clean = chosenNickname.trim();
+                if (!clean) return;
+                setNickname(clean);
+                setView('menu');
+            };
+
+            const startGame = () => {
+                setView('playing');
+                setLevel(0);
+                setScore(0);
+                setFeedback(null);
+            };
+
+            const nextLevel = () => {
+                if (level < LEVELS_DATA.length - 1) {
+                    setLevel(level + 1);
+                    setFeedback(null);
+                } else {
+                    saveScoreToLeaderboard(score);
+                    setView('end');
+                }
+            };
+
+            const showFeedback = (isCorrect, message, points = 100) => {
+                setFeedback({ isCorrect, message });
+                if (isCorrect) setScore(s => s + points);
+                setTimeout(() => {
+                    if (isCorrect) nextLevel();
+                    else setFeedback(null);
+                }, 4500);
+            };
+
+            // --- CHIAMATE GEMINI AI (Ora ottimizzate con callGemini) ---
+            const handleGenerateAIPalette = async () => {
+                if (!aiBrandDescription.trim()) return;
+                setIsAiLoading(true);
+                setAiError(null);
+                setAiResponse(null);
+
+                const promptText = `Crea un'analisi cromatico-psicologica completa basata su Itten e sulla psicologia del marketing per il brand: "${aiBrandDescription}". Mood: "${aiMood}". Genera output in formato JSON strutturato con: "paletteName", "colors" (array di 4 elementi con hex, name, role, psychology), "ittenContrast", "marketingExplanation", "uxTip".`;
+                const schema = {
+                    type: "OBJECT",
+                    properties: {
+                        paletteName: { type: "STRING" },
+                        colors: {
+                            type: "ARRAY",
+                            items: {
+                                type: "OBJECT",
+                                properties: {
+                                    hex: { type: "STRING" },
+                                    name: { type: "STRING" },
+                                    role: { type: "STRING" },
+                                    psychology: { type: "STRING" }
+                                },
+                                required: ["hex", "name", "role", "psychology"]
+                            }
+                        },
+                        ittenContrast: { type: "STRING" },
+                        marketingExplanation: { type: "STRING" },
+                        uxTip: { type: "STRING" }
+                    },
+                    required: ["paletteName", "colors", "ittenContrast", "marketingExplanation", "uxTip"]
+                };
+
+                try {
+                    const result = await callGemini(
+                        promptText,
+                        "Sei un assistente AI specializzato nella teoria del colore di Itten, design UX/UI e psicologia del marketing. Rispondi esclusivamente in italiano in formato JSON valido.",
+                        schema
+                    );
+                    const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                    setAiResponse(JSON.parse(rawText));
+                } catch (err) {
+                    setAiError(err.message || "Errore di connessione con il servizio AI.");
+                } finally {
+                    setIsAiLoading(false);
+                }
+            };
+
+            const handleGenerateSafetySign = async () => {
+                if (!safetyScenario.trim()) return;
+                setIsSafetyLoading(true);
+                setSafetyError(null);
+                setSafetyResponse(null);
+
+                const promptText = `Crea un cartello stradale o di sicurezza per: "${safetyScenario}", Categoria: "${safetyCategory}". Rispondi in JSON strutturato con: "signTitle", "regulatoryCategory", "shape" (triangle, circle, square, rectangle), "bgColor", "borderColor", "textColor", "symbolPath" (stringa pulita del parametro d di un path SVG per viewBox 0 0 100 100), "symbolDescription", "behavioralRule", "technicalStandards".`;
+                const schema = {
+                    type: "OBJECT",
+                    properties: {
+                        signTitle: { type: "STRING" },
+                        regulatoryCategory: { type: "STRING" },
+                        shape: { type: "STRING" },
+                        bgColor: { type: "STRING" },
+                        borderColor: { type: "STRING" },
+                        textColor: { type: "STRING" },
+                        symbolPath: { type: "STRING" },
+                        symbolDescription: { type: "STRING" },
+                        behavioralRule: { type: "STRING" },
+                        technicalStandards: { type: "STRING" }
+                    },
+                    required: ["signTitle", "regulatoryCategory", "shape", "bgColor", "borderColor", "textColor", "symbolPath", "symbolDescription", "behavioralRule", "technicalStandards"]
+                };
+
+                try {
+                    const result = await callGemini(
+                        promptText,
+                        "Sei un ingegnere della sicurezza sui luoghi di lavoro ed esperto del Codice della Strada italiano. Generi segnali stradali e di sicurezza conformi alla norma UNI EN ISO 7010 in formato JSON strutturato, disegnando un pigtogramma SVG personalizzato. Rispondi in italiano in formato JSON valido.",
+                        schema
+                    );
+                    const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                    setSafetyResponse(JSON.parse(rawText));
+                } catch (err) {
+                    setSafetyError(err.message || "Errore durante la generazione del cartello.");
+                } finally {
+                    setIsSafetyLoading(false);
+                }
+            };
+
+            const handleSendChatMessage = async () => {
+                if (!chatInput.trim() || isChatLoading) return;
+                const userMessage = chatInput;
+                setChatMessages(prev => [...prev, { sender: 'user', text: userMessage }]);
+                setChatInput('');
+                setIsChatLoading(true);
+
+                const promptText = `L'utente dice: "${userMessage}". Rispondi in italiano come Johannes Itten o docente d'arte del Bauhaus. Massimo 4 frasi d'impatto.`;
+                try {
+                    const result = await callGemini(
+                        promptText,
+                        "Sei un professore universitario di Arti Visive ed esperto dei 7 contrasti cromatici di Johannes Itten, della psicologia del marketing legata al colore e del design UX/UI."
+                    );
+                    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                    setChatMessages(prev => [...prev, { sender: 'ai', text }]);
+                } catch (err) {
+                    setChatMessages(prev => [...prev, { sender: 'ai', text: err.message || "Errore di connessione con il Bauhaus." }]);
+                } finally {
+                    setIsChatLoading(false);
+                }
+            };
+
+            const handleAnalyzeEmojiDrawing = async (base64Png) => {
+                setIsDrawingEmojiLoading(true);
+                setEmojiError(null);
+                setEmojiResponse(null);
+
+                const promptText = `Analizza questo disegno di emoji. Fornisci un output JSON strutturato con: "emojiName", "svgOutput" (codice SVG valido per viewBox 0 0 100 100), "detectedColors" (array), "ittenAnalysis", "psychologicalProfile".`;
+                const schema = {
+                    type: "OBJECT",
+                    properties: {
+                        emojiName: { type: "STRING" },
+                        svgOutput: { type: "STRING" },
+                        detectedColors: { type: "ARRAY", items: { type: "STRING" } },
+                        ittenAnalysis: { type: "STRING" },
+                        psychologicalProfile: { type: "STRING" }
+                    },
+                    required: ["emojiName", "svgOutput", "detectedColors", "ittenAnalysis", "psychologicalProfile"]
+                };
+
+                try {
+                    const result = await callGemini(
+                        promptText,
+                        "Sei un illustratore esperto di icone digitali, specialista di psicologia del colore applicata alle emoji e docente d'arte della scuola del Bauhaus. Rispondi in italiano in formato JSON valido.",
+                        schema,
+                        base64Png
+                    );
+                    const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                    setEmojiResponse(JSON.parse(rawText));
+                } catch (err) {
+                    setEmojiError(err.message || "Analisi del disegno fallita.");
+                } finally {
+                    setIsDrawingEmojiLoading(false);
+                }
+            };
+
+            return (
+                <div className="flex flex-col min-h-screen justify-between bg-slate-50">
+                    <div>
+                        {/* HEADER GLOBALE */}
+                        <header className="bg-white shadow-sm p-4 sticky top-0 z-10 border-b border-slate-100">
+                            <div className="max-w-4xl mx-auto flex justify-between items-center">
+                                <div className="flex flex-col cursor-pointer" onClick={() => nickname && setView('menu')}>
+                                    <div className="flex items-center gap-2">
+                                        <Icon.Palette />
+                                        <h1 className="text-xl font-black bg-clip-text text-transparent bg-gradient-to-r from-red-500 via-yellow-500 to-blue-500">
+                                            L'Atelier di Itten
+                                        </h1>
+                                    </div>
+                                    <span className="text-[10px] sm:text-xs font-bold text-slate-500 mt-1 uppercase tracking-wider bg-slate-50 px-2 py-0.5 rounded border border-slate-100 self-start">
+                                        Materiale didattico Prof. Delfino REGA
+                                    </span>
+                                </div>
+                                
+                                <div className="flex items-center gap-4">
+                                    {view === 'playing' && (
+                                        <div className="flex items-center gap-4 font-semibold text-slate-600">
+                                            <span>Sfida {level + 1}/{LEVELS_DATA.length}</span>
+                                            <span className="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm">
+                                                Punti: {score}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {nickname && view !== 'playing' && (
+                                        <div className="flex items-center gap-2 text-sm font-medium text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full">
+                                            <Icon.User /> {nickname}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </header>
+
+                        {/* COMPONENTE INTERFACCIA PRINCIPALE */}
+                        <main className="max-w-4xl mx-auto p-4 mt-6">
+                            {view === 'registration' && <RegistrationScreen onRegister={handleRegister} />}
+                            
+                            {view === 'menu' && (
+                                <MenuScreen 
+                                    onStart={startGame} 
+                                    onLeaderboard={() => setView('leaderboard')} 
+                                    onAiLab={() => setView('ai-lab')} 
+                                    onSafetyLab={() => setView('safety-lab')}
+                                    onChatLab={() => setView('ai-chat')}
+                                    onEmojiLab={() => setView('emoji-lab')}
+                                    onPuzzleLab={() => setView('puzzle-lab')}
+                                    onFourColorLab={() => setView('four-color-lab')}
+                                    onColorHuntLab={() => setView('color-hunt-lab')}
+                                />
+                            )}
+
+                            {view === 'leaderboard' && (
+                                <LeaderboardScreen leaderboard={leaderboard} onBack={() => setView('menu')} />
+                            )}
+
+                            {view === 'emoji-lab' && (
+                                <EmojiDrawingLab 
+                                    isLoading={isDrawingEmojiLoading}
+                                    error={emojiError}
+                                    response={emojiResponse}
+                                    onAnalyze={handleAnalyzeEmojiDrawing}
+                                    onBack={() => setView('menu')}
+                                />
+                            )}
+
+                            {view === 'puzzle-lab' && (
+                                <IttenPuzzleLab 
+                                    onBack={() => setView('menu')} 
+                                    onVictory={(bonus) => {
+                                        setScore(s => s + bonus);
+                                        saveScoreToLeaderboard(score + bonus);
+                                    }}
+                                />
+                            )}
+                            
+                            {view === 'four-color-lab' && (
+                                <FourColorLab 
+                                    onBack={() => setView('menu')} 
+                                    onVictory={(bonus) => {
+                                        setScore(s => s + bonus);
+                                        saveScoreToLeaderboard(score + bonus);
+                                    }}
+                                />
+                            )}
+
+                            {view === 'color-hunt-lab' && (
+                                <ColorHuntLab 
+                                    onBack={() => setView('menu')} 
+                                    onVictory={(bonus) => {
+                                        setScore(s => s + bonus);
+                                        saveScoreToLeaderboard(score + bonus);
+                                    }}
+                                />
+                            )}
+
+                            {view === 'ai-chat' && (
+                                <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100 flex flex-col h-[600px]">
+                                    <div className="bg-gradient-to-r from-indigo-700 to-purple-800 text-white p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <Icon.MessageSquare />
+                                            <div>
+                                                <h2 className="text-xl font-bold">Tutor Personale Itten AI ✨</h2>
+                                                <p className="text-xs text-indigo-200">Ottieni risposte sulla teoria del colore, contrasti e marketing</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded font-bold uppercase tracking-wider">
+                                                Materiale didattico Prof. Delfino REGA
+                                            </span>
+                                            <button onClick={() => setView('menu')} className="bg-white/10 hover:bg-white/20 text-white font-bold py-1.5 px-4 rounded-xl text-xs transition-colors">
+                                                Esci
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex-grow p-4 overflow-y-auto space-y-4 bg-slate-50/50">
+                                        {chatMessages.map((msg, idx) => (
+                                            <div key={idx} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                                <div className={`max-w-[80%] rounded-2xl p-4 text-sm ${msg.sender === 'user' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-700 border border-slate-100 shadow-sm'}`}>
+                                                    <p className="whitespace-pre-line leading-relaxed">{msg.text}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {isChatLoading && (
+                                            <div className="flex justify-start">
+                                                <div className="bg-white text-slate-400 border border-slate-100 p-4 rounded-2xl text-xs font-semibold animate-pulse flex items-center gap-2">
+                                                    <Icon.Sparkles /> Il Tutor sta scrivendo...
+                                                </div>
+                                            </div>
+                                        )}
+                                        <div ref={chatEndRef} />
+                                    </div>
+
+                                    <div className="p-4 bg-white border-t border-slate-100 flex gap-2">
+                                        <input 
+                                            type="text" 
+                                            className="flex-grow p-3.5 border border-slate-200 rounded-xl outline-none focus:border-indigo-500 text-sm"
+                                            placeholder="Chiedimi ad esempio: Cos'è il contrasto simultaneo?"
+                                            value={chatInput}
+                                            onChange={e => setChatInput(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && handleSendChatMessage()}
+                                        />
+                                        <button 
+                                            onClick={handleSendChatMessage}
+                                            disabled={isChatLoading || !chatInput.trim()}
+                                            className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white p-3.5 rounded-xl flex items-center justify-center flex-shrink-0"
+                                        >
+                                            <Icon.Send />
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {view === 'ai-lab' && (
+                                <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100">
+                                    <div className="bg-gradient-to-r from-purple-800 to-indigo-800 text-white p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                        <div>
+                                            <span className="text-xs uppercase font-extrabold tracking-widest text-indigo-200 flex items-center gap-1.5">
+                                                <Icon.Sparkles /> Innovazione Didattica
+                                            </span>
+                                            <h2 className="text-2xl font-bold mt-1">Laboratorio Cromatico AI ✨</h2>
+                                            <p className="text-slate-200 text-base">Descrivi la tua idea di brand. L'AI analizzerà le risonanze cromatiche legando Itten e Adobe.</p>
+                                        </div>
+                                        <span className="text-[10px] bg-white/20 text-white px-2.5 py-1 rounded font-bold uppercase tracking-wider shrink-0 text-center">
+                                            Materiale didattico Prof. Delfino REGA
+                                        </span>
+                                    </div>
+
+                                    <div className="p-6 sm:p-8 space-y-6">
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                            <div className="md:col-span-2 space-y-4">
+                                                <label className="block text-sm font-bold text-slate-700">Descrizione dell'Idea o del Brand</label>
+                                                <textarea 
+                                                    rows="3"
+                                                    className="w-full p-4 border-2 border-slate-200 rounded-2xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all text-sm"
+                                                    placeholder="Esempio: Una clinica odontoiatrica moderna per bambini, che vuole trasmettere calma ma anche allegria..."
+                                                    value={aiBrandDescription}
+                                                    onChange={e => setAiBrandDescription(e.target.value)}
+                                                />
+                                            </div>
+                                            
+                                            <div className="space-y-4">
+                                                <label className="block text-sm font-bold text-slate-700">Umore & Emozioni Target</label>
+                                                <select 
+                                                    className="w-full p-4 border-2 border-slate-200 bg-white rounded-2xl outline-none focus:border-indigo-500 transition-all text-sm font-semibold text-slate-700"
+                                                    value={aiMood}
+                                                    onChange={e => setAiMood(e.target.value)}
+                                                >
+                                                    <option value="Energia e Innovazione">Energia e Innovazione</option>
+                                                    <option value="Calma e Sicurezza professionale">Calma e Sicurezza professionale</option>
+                                                    <option value="Lusso ed Eleganza d'élite">Lusso ed Eleganza d'élite</option>
+                                                    <option value="Creatività e Divertimento giocoso">Creatività e Divertimento giocoso</option>
+                                                    <option value="Naturalezza, Salute e Sostenibilità">Naturalezza, Salute e Sostenibilità</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex gap-4">
+                                            <button 
+                                                onClick={handleGenerateAIPalette}
+                                                disabled={isAiLoading || !aiBrandDescription.trim()}
+                                                className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold py-4 px-8 rounded-full text-base flex items-center gap-2 shadow-lg"
+                                            >
+                                                Genera Palette AI
+                                            </button>
+                                            <button onClick={() => setView('menu')} className="border-2 border-slate-200 hover:bg-slate-50 font-bold py-4 px-6 rounded-full text-sm">
+                                                Torna al Menu
+                                            </button>
+                                        </div>
+
+                                        {isAiLoading && (
+                                            <div className="py-12 flex flex-col items-center justify-center space-y-4 border-t border-slate-100 animate-pulse">
+                                                <div className="w-12 h-12 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin"></div>
+                                                <p className="text-slate-500 text-sm font-semibold flex items-center gap-1.5">
+                                                    Elaborazione cromatico-psicologica in corso...
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {aiError && (
+                                            <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex gap-3 text-red-700 text-sm items-center">
+                                                <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                                                <p className="font-semibold">{aiError}</p>
+                                            </div>
+                                        )}
+
+                                        {aiResponse && (
+                                            <div className="border-t border-slate-100 pt-8 space-y-6">
+                                                <div className="bg-indigo-50 border p-4 rounded-2xl flex items-center justify-between">
+                                                    <div>
+                                                        <span className="text-xs uppercase font-extrabold text-indigo-500">Nome Palette</span>
+                                                        <h3 className="text-xl font-black text-indigo-900 mt-0.5">{aiResponse.paletteName}</h3>
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                                                    {aiResponse.colors.map((color, index) => (
+                                                        <div key={index} className="bg-slate-50 border border-slate-100 rounded-3xl p-4 flex flex-col h-full shadow-sm">
+                                                            <div 
+                                                                className="w-full h-24 rounded-2xl mb-3 shadow-inner relative group cursor-pointer"
+                                                                style={{ backgroundColor: color.hex }}
+                                                                onClick={() => copyToClipboard(color.hex, index)}
+                                                            >
+                                                                <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl flex items-center justify-center text-white text-xs font-bold gap-1">
+                                                                    Copia HEX
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex-grow space-y-1">
+                                                                <h4 className="font-bold text-slate-800 text-sm flex items-center justify-between">
+                                                                    <span>{color.name}</span>
+                                                                    <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded">
+                                                                        {color.role}
+                                                                    </span>
+                                                                </h4>
+                                                                <span className="text-xs font-mono font-semibold text-slate-500 block">{color.hex}</span>
+                                                                <p className="text-xs text-slate-600 leading-relaxed pt-1">{color.psychology}</p>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 border-t border-slate-100 pt-6">
+                                                    <div className="bg-amber-50/50 border border-amber-100 p-5 rounded-3xl space-y-2">
+                                                        <span className="text-xs uppercase font-extrabold text-amber-700 tracking-wider">Contrasto di Itten Consigliato</span>
+                                                        <p className="text-sm font-bold text-amber-900">{aiResponse.ittenContrast}</p>
+                                                    </div>
+
+                                                    <div className="bg-emerald-50/50 border border-emerald-100 p-5 rounded-3xl space-y-2">
+                                                        <span className="text-xs uppercase font-extrabold text-emerald-700 tracking-wider">Impatto Marketing</span>
+                                                        <p className="text-sm text-emerald-900 leading-relaxed">{aiResponse.marketingExplanation}</p>
+                                                    </div>
+
+                                                    <div className="bg-blue-50/50 border border-blue-100 p-5 rounded-3xl space-y-2">
+                                                        <span className="text-xs uppercase font-extrabold text-blue-700 tracking-wider">Regole UX/UI per lo Schermo</span>
+                                                        <p className="text-sm text-blue-900 leading-relaxed">{aiResponse.uxTip}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                      </div>
+                                </div>
+                            )}
+
+                            {view === 'safety-lab' && (
+                                <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100">
+                                    <div className="bg-gradient-to-r from-red-700 via-orange-600 to-yellow-600 text-white p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                        <div>
+                                            <span className="text-xs uppercase font-extrabold tracking-widest text-orange-200 flex items-center gap-1.5">
+                                                <Icon.ShieldAlert /> Sicurezza sul Lavoro & Codice della Strada
+                                            </span>
+                                            <h2 className="text-2xl font-bold mt-1">Laboratorio Segnaletica di Sicurezza AI ⚠️</h2>
+                                            <p className="text-slate-105 text-sm mt-1">Progetta un cartello normato tramite l'AI, scoprendo l'importanza cruciale dei contrasti ad alta visibilità (UNI EN ISO 7010).</p>
+                                        </div>
+                                        <span className="text-[10px] bg-white/20 text-white px-2.5 py-1 rounded font-bold uppercase tracking-wider shrink-0 text-center">
+                                            Materiale didattico Prof. Delfino REGA
+                                        </span>
+                                    </div>
+
+                                    <div className="p-6 sm:p-8 space-y-6">
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                            <div className="md:col-span-2 space-y-4">
+                                                <label className="block text-sm font-bold text-slate-700">Contesto, Pericolo o Rischio</label>
+                                                <textarea 
+                                                    rows="3"
+                                                    className="w-full p-4 border-2 border-slate-200 rounded-2xl outline-none focus:border-red-500 focus:ring-4 focus:ring-red-100 transition-all text-sm"
+                                                    placeholder="Esempio: Alta tensione nei pressi di una cabina elettrica..."
+                                                    value={safetyScenario}
+                                                    onChange={e => setSafetyScenario(e.target.value)}
+                                                />
+                                            </div>
+                                            
+                                            <div className="space-y-4">
+                                                <label className="block text-sm font-bold text-slate-700">Categoria UNI EN ISO 7010</label>
+                                                <select 
+                                                    className="w-full p-4 border-2 border-slate-200 bg-white rounded-2xl outline-none focus:border-red-500 transition-all text-sm font-semibold text-slate-700"
+                                                    value={safetyCategory}
+                                                    onChange={e => setSafetyCategory(e.target.value)}
+                                                >
+                                                    <option value="Divieto">Divieto (Rosso / Cerchio)</option>
+                                                    <option value="Obbligo">Prescrizione / Obbligo (Blu / Cerchio)</option>
+                                                    <option value="Avvertimento">Avvertimento / Pericolo (Giallo / Triangolo)</option>
+                                                    <option value="Salvataggio e Soccorso">Salvataggio e Soccorso (Verde / Quadrato)</option>
+                                                    <option value="Antincendio">Antincendio (Rosso / Quadrato)</option>
+                                                    <option value="Segnale Stradale">Segnaletica Stradale di Prescrizione / Pericolo</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex gap-4">
+                                            <button 
+                                                onClick={handleGenerateSafetySign}
+                                                disabled={isSafetyLoading || !safetyScenario.trim()}
+                                                className="bg-red-600 hover:bg-red-700 disabled:bg-slate-300 text-white font-bold py-4 px-8 rounded-full text-base flex items-center gap-2 shadow-lg"
+                                            >
+                                                Costruisci Segnale con AI
+                                            </button>
+                                            <button onClick={() => setView('menu')} className="border-2 border-slate-200 hover:bg-slate-50 font-bold py-4 px-6 rounded-full text-sm">
+                                                Torna al Menu
+                                            </button>
+                                        </div>
+
+                                        {isSafetyLoading && (
+                                            <div className="py-12 flex flex-col items-center justify-center space-y-4 border-t border-slate-100 animate-pulse">
+                                                <div className="w-12 h-12 rounded-full border-4 border-red-600 border-t-transparent animate-spin"></div>
+                                                <p className="text-slate-500 text-sm font-semibold flex items-center gap-1.5">
+                                                    Assemblaggio grafico del segnale in corso...
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {safetyResponse && (
+                                            <div className="border-t border-slate-100 pt-8 grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
+                                                <div className="md:col-span-4 flex flex-col items-center justify-center p-6 bg-slate-100 rounded-3xl border border-slate-200/50">
+                                                    <span className="text-xs uppercase font-extrabold text-slate-400 tracking-wider mb-4">Segnale Vettoriale</span>
+                                                    <div className="w-48 h-48 flex items-center justify-center relative">
+                                                        <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-lg">
+                                                            {safetyResponse.shape === 'triangle' && (
+                                                                <polygon points="50,5 95,85 5,85" fill={safetyResponse.bgColor} stroke={safetyResponse.borderColor} strokeWidth="5" />
+                                                            )}
+                                                            {safetyResponse.shape === 'circle' && (
+                                                                <circle cx="50" cy="50" r="45" fill={safetyResponse.bgColor} stroke={safetyResponse.borderColor} strokeWidth="5" />
+                                                            )}
+                                                            {safetyResponse.shape === 'square' && (
+                                                                <rect x="5" y="5" width="90" height="90" rx="10" fill={safetyResponse.bgColor} stroke={safetyResponse.borderColor} strokeWidth="5" />
+                                                            )}
+                                                            {safetyResponse.shape === 'rectangle' && (
+                                                                <rect x="5" y="15" width="90" height="70" rx="8" fill={safetyResponse.bgColor} stroke={safetyResponse.borderColor} strokeWidth="5" />
+                                                            )}
+                                                            <path d={safetyResponse.symbolPath} fill={safetyResponse.textColor} transform="translate(25, 25) scale(0.5)" />
+                                                            {safetyResponse.shape === 'circle' && safetyCategory === 'Divieto' && (
+                                                                <line x1="18" y1="18" x2="82" y2="82" stroke={safetyResponse.borderColor} strokeWidth="6" />
+                                                            )}
+                                                        </svg>
+                                                    </div>
+                                                    <p className="text-xs text-slate-500 text-center font-semibold mt-4 bg-slate-200 px-3 py-1 rounded-full">
+                                                        Icona: {safetyResponse.symbolDescription}
+                                                    </p>
+                                                </div>
+
+                                                <div className="md:col-span-8 space-y-4">
+                                                    <div>
+                                                        <span className="text-xs uppercase font-extrabold text-red-600 tracking-wider bg-red-50 px-2.5 py-1 rounded-full">
+                                                            {safetyResponse.regulatoryCategory}
+                                                        </span>
+                                                        <h3 className="text-2xl font-black text-slate-800 mt-2">{safetyResponse.signTitle}</h3>
+                                                    </div>
+
+                                                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/50">
+                                                        <h4 className="text-sm font-extrabold text-slate-700">Prescrizione Comportamentale</h4>
+                                                        <p className="text-sm text-slate-600 leading-relaxed font-semibold mt-1">
+                                                            {safetyResponse.behavioralRule}
+                                                        </p>
+                                                    </div>
+
+                                                    <div className="p-4 bg-indigo-50/60 rounded-2xl border border-indigo-100/60">
+                                                        <h4 className="text-sm font-extrabold text-indigo-900">Standard Tecnici & Contrasto</h4>
+                                                        <p className="text-sm text-indigo-950 leading-relaxed mt-1 whitespace-pre-line">
+                                                            {safetyResponse.technicalStandards}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {view === 'playing' && (
+                                <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100">
+                                    <div className="bg-slate-800 text-white p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                        <div>
+                                            <span className="text-xs uppercase font-extrabold tracking-widest text-indigo-300">Scienza del Colore, Design & Marketing</span>
+                                            <h2 className="text-2xl font-bold mt-1 mb-2">{LEVELS_DATA[level].title}</h2>
+                                            <p className="text-slate-300 text-base">{LEVELS_DATA[level].desc}</p>
+                                        </div>
+                                        <span className="text-[10px] bg-white/20 text-white px-2.5 py-1 rounded font-bold uppercase tracking-wider shrink-0 text-center">
+                                            Materiale didattico Prof. Delfino REGA
+                                        </span>
+                                    </div>
+
+                                    <div className="p-4 sm:p-8 relative min-h-[460px] flex flex-col justify-center">
+                                        {feedback && (
+                                            <div className="absolute inset-0 bg-white/95 backdrop-blur-sm z-20 flex flex-col items-center justify-center p-6 animate-in fade-in duration-300">
+                                                {feedback.isCorrect ? (
+                                                    <div className="text-green-500 text-5xl mb-2">✓</div>
+                                                ) : (
+                                                    <div className="text-red-500 text-5xl mb-2">✗</div>
+                                                )}
+                                                <h3 className={`text-2xl font-bold text-center mb-2 ${feedback.isCorrect ? 'text-green-600' : 'text-red-600'}`}>
+                                                    {feedback.isCorrect ? 'Risposta Esatta!' : 'Riprova!'}
+                                                </h3>
+                                                <p className="text-base sm:text-lg text-slate-600 text-center max-w-lg font-medium leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                                    {feedback.message}
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        <div className="w-full">
+                                            {LEVELS_DATA[level].type === 'interactive-primaries' && <InteractivePrimaries showFeedback={showFeedback} />}
+                                            {LEVELS_DATA[level].type === 'interactive-mix' && <InteractiveMix showFeedback={showFeedback} levelData={LEVELS_DATA[level]} />}
+                                            {LEVELS_DATA[level].type === 'interactive-complementary' && <InteractiveComplementary showFeedback={showFeedback} levelData={LEVELS_DATA[level]} />}
+                                            {LEVELS_DATA[level].type === 'interactive-light' && <InteractiveLight showFeedback={showFeedback} />}
+                                            {LEVELS_DATA[level].type === 'quiz' && <QuizLevel showFeedback={showFeedback} levelData={LEVELS_DATA[level]} />}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {view === 'end' && <EndScreen score={score} total={LEVELS_DATA.length * 100} onHome={() => setView('menu')} />}
+                        </main>
+                    </div>
+
+                    <footer className="text-center py-6 text-xs text-slate-400 font-extrabold border-t border-slate-200 bg-white mt-12 w-full">
+                        <div className="max-w-4xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-2">
+                            <p>© 2026 L'Atelier di Itten — Tutti i diritti riservati.</p>
+                            <p className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded border border-indigo-100 tracking-wider uppercase">
+                                MATERIALE DIDATTICO PROF. DELFINO REGA
+                            </p>
+                        </div>
+                    </footer>
+                </div>
+            );
+        }
+
+        // --- SCHERMATE E SOTTO-COMPONENTI INTERFACCIA ---
+
+        function RegistrationScreen({ onRegister }) {
+            const [val, setVal] = useState('');
+            return (
+                <div className="bg-white p-8 rounded-3xl shadow-lg max-w-md mx-auto text-center mt-12 border border-slate-100 space-y-4">
+                    <div className="bg-indigo-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-2 text-indigo-600 font-bold text-2xl flex-shrink-0">
+                        U
+                    </div>
+                    <h2 className="text-2xl font-bold text-slate-800">Crea il tuo profilo</h2>
+                    <p className="text-slate-500 text-sm leading-relaxed">
+                        Inserisci un nickname per registrare il tuo punteggio nell'Atelier e accedere a tutti i laboratori interattivi d'arte e sicurezza.
+                    </p>
+                    <div className="text-center py-1">
+                        <span className="text-[10px] bg-indigo-50 text-indigo-750 px-2.5 py-1 rounded font-bold uppercase tracking-wider inline-block">
+                            Materiale didattico Prof. Delfino REGA
+                        </span>
+                    </div>
+                    <form onSubmit={(e) => onRegister(e, val)} className="space-y-4 pt-2">
+                        <input 
+                            type="text" 
+                            maxLength="15"
+                            required
+                            placeholder="Il tuo Nickname..." 
+                            className="w-full p-4 border-2 border-slate-200 rounded-xl text-lg text-center focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 outline-none transition-all"
+                            value={val}
+                            onChange={e => setVal(e.target.value)}
+                        />
+                        <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl text-lg shadow-md">
+                            Accedi e Gioca
+                        </button>
+                    </form>
+                </div>
+            );
+        }
+
+        // --- SUB-COMPONENTE: MENUSCREEN ---
+        function MenuScreen({ onStart, onLeaderboard, onAiLab, onSafetyLab, onChatLab, onEmojiLab, onPuzzleLab, onFourColorLab, onColorHuntLab }) {
+            return (
+                <div className="max-w-3xl mx-auto mt-8">
+                    <div className="bg-white p-8 sm:p-10 rounded-3xl shadow-xl border border-slate-100 relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-32 h-32 bg-red-400 rounded-br-full opacity-10"></div>
+                        <div className="absolute bottom-0 right-0 w-40 h-40 bg-blue-400 rounded-tl-full opacity-10"></div>
+                        
+                        <div className="relative z-10 text-center">
+                            <div className="w-20 h-20 mx-auto text-indigo-600 mb-6 flex items-center justify-center bg-indigo-50 rounded-full">
+                                <Icon.Palette className="w-10 h-10" />
+                            </div>
+                            <h2 className="text-4xl font-extrabold mb-2 text-slate-800">L'Atelier di Itten</h2>
+                            <span className="text-xs uppercase tracking-widest font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100 inline-block">
+                                Materiale didattico Prof. Delfino REGA
+                            </span>
+                        </div>
+
+                        <div className="mt-8 mb-6 p-6 bg-gradient-to-r from-slate-50 to-indigo-50/30 rounded-2xl border-2 border-indigo-100 relative z-10 shadow-sm">
+                            <div className="flex flex-col sm:flex-row gap-4 items-center sm:items-start">
+                                <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-white font-black text-xl shadow-md border-2 border-white flex-shrink-0">
+                                    DR
+                                </div>
+                                <div className="text-center sm:text-left">
+                                    <h4 className="font-bold text-slate-800 text-lg flex items-center justify-center sm:justify-start gap-2">
+                                        Prof. Delfino REGA
+                                        <span className="text-xs bg-indigo-200 text-indigo-800 px-2 py-0.5 rounded-full font-semibold">Docente</span>
+                                    </h4>
+                                    <p className="text-slate-600 mt-2 text-sm italic leading-relaxed">
+                                        "Benvenuti all'Atelier di Itten! Ho appositamente progettato questa piattaforma didattica per accompagnarvi alla scoperta della <strong>scienza ottica</strong>, dell'<strong>armonia di Itten</strong> e della <strong>psicologia cromatica nel marketing moderno</strong>. Mettetevi alla prova con queste 15 sfide interattive, studiate le regole e l'impatto culturale del colore e cercate di conquistare la vetta della classifica globale dei nostri allievi. Buon viaggio e buono studio!"
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 relative z-10">
+                            <button onClick={onStart} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-6 rounded-2xl text-base flex items-center justify-center gap-3 shadow-lg">
+                                Inizia Percorso (15 Quiz)
+                            </button>
+
+                            <button onClick={onPuzzleLab} className="bg-gradient-to-r from-amber-500 to-yellow-500 text-white font-bold py-4 px-6 rounded-2xl text-base flex items-center justify-center gap-2 shadow-lg">
+                                🧩 Puzzle Cerchio Cromatico
+                            </button>
+
+                            <button onClick={onEmojiLab} className="bg-gradient-to-r from-pink-500 to-rose-500 text-white font-bold py-4 px-6 rounded-2xl text-base flex items-center justify-center gap-2 shadow-lg">
+                                <Icon.Smile /> 🎨 Lab Disegno Emoji AI
+                            </button>
+                            
+                            <button onClick={onSafetyLab} className="bg-gradient-to-r from-red-600 to-orange-500 text-white font-bold py-4 px-6 rounded-2xl text-base flex items-center justify-center gap-2 shadow-lg">
+                                ⚠️ Lab Segnaletica AI
+                            </button>
+
+                            <button onClick={onAiLab} className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold py-4 px-6 rounded-2xl text-base flex items-center justify-center gap-2 shadow-lg">
+                                <Icon.Sparkles /> ✨ Lab Brand AI ✨
+                            </button>
+
+                            <button onClick={onFourColorLab} className="bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-bold py-4 px-6 rounded-2xl text-base flex items-center justify-center gap-2 shadow-lg">
+                                <Icon.Map /> 🗺️ Lab Teorema 4 Colori
+                            </button>
+
+                            <button onClick={onColorHuntLab} className="bg-gradient-to-r from-rose-500 to-red-500 text-white font-bold py-4 px-6 rounded-2xl text-base flex items-center justify-center gap-2 shadow-lg col-span-1 sm:col-span-2">
+                                🏃‍♂️ Caccia al Colore (Live!)
+                            </button>
+
+                            <button onClick={onChatLab} className="bg-gradient-to-r from-blue-600 to-indigo-500 text-white font-bold py-4 px-6 rounded-2xl text-base flex items-center justify-center gap-2 shadow-lg col-span-1 sm:col-span-2">
+                                <Icon.MessageSquare /> 💬 Tutor Chat Personale AI
+                            </button>
+
+                            <button onClick={onLeaderboard} className="bg-white border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 font-bold py-4 px-6 rounded-2xl text-base flex items-center justify-center gap-3 col-span-1 sm:col-span-2">
+                                <Icon.Trophy /> Classifica Generale
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // --- SUB-COMPONENTE: LEADERBOARDSCREEN ---
+        function LeaderboardScreen({ leaderboard, onBack }) {
+            return (
+                <div className="max-w-2xl mx-auto mt-8">
+                    <div className="bg-white p-6 sm:p-10 rounded-3xl shadow-xl border border-slate-100 space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-2xl sm:text-3xl font-bold flex items-center gap-3 text-slate-800">
+                                <Icon.Trophy /> Classifica Allievi
+                            </h2>
+                            <button onClick={onBack} className="text-slate-500 hover:text-slate-800 font-semibold px-4 py-2 bg-slate-100 rounded-xl text-sm transition-colors">
+                                Indietro
+                            </button>
+                        </div>
+                        
+                        <div className="text-center sm:text-left">
+                            <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-1 rounded font-bold uppercase tracking-wider inline-block">
+                                Materiale didattico Prof. Delfino REGA
+                            </span>
+                        </div>
+
+                        <div className="space-y-3 pt-2">
+                            {leaderboard.map((entry, index) => (
+                                <div key={entry.id || index} className="flex items-center justify-between p-4 rounded-2xl border border-slate-150">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm bg-slate-100 text-slate-500">
+                                            {index + 1}°
+                                        </div>
+                                        <span className="font-bold text-base text-slate-800">{entry.nickname}</span>
+                                    </div>
+                                    <div className="font-bold text-indigo-600 bg-indigo-50 px-4 py-1.5 rounded-xl text-sm">
+                                        {entry.score} pt
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // --- SUB-COMPONENTE: ENDSCREEN ---
+        function EndScreen({ score, total, onHome }) {
+            const percentage = Math.round((score / total) * 100);
+            let message = "Ottimo lavoro!";
+            if (percentage === 100) message = "Maestro del Colore assoluto!";
+            else if (percentage >= 80) message = "Eccellente! Hai una percezione visiva e strategica sbalorditiva.";
+
+            return (
+                <div className="bg-white p-8 sm:p-10 rounded-3xl shadow-xl text-center max-w-2xl mx-auto border border-slate-100 mt-8 space-y-4">
+                    <div className="text-5xl">🎨</div>
+                    <h2 className="text-3xl font-extrabold text-slate-800">Sfida Conclusa!</h2>
+                    <p className="text-lg text-slate-600 font-medium">{message}</p>
+                    
+                    <div className="text-center">
+                        <span className="text-[10px] bg-indigo-50 text-indigo-750 px-3 py-1 rounded font-bold uppercase tracking-wider inline-block">
+                            Materiale didattico Prof. Delfino REGA
+                        </span>
+                    </div>
+                    
+                    <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border p-6 rounded-2xl">
+                        <p className="text-slate-500 mb-1 text-xs uppercase font-bold tracking-widest">Risultato</p>
+                        <div className="text-5xl font-black text-indigo-600 mb-2">{score} <span className="text-xl text-slate-400">/ {total}</span></div>
+                    </div>
+
+                    <button onClick={onHome} className="bg-slate-800 hover:bg-slate-900 text-white font-bold py-4 px-8 rounded-full text-lg shadow-lg flex items-center gap-2 mx-auto">
+                        <Icon.Refresh /> Torna al Menu
+                    </button>
+                </div>
+            );
+        }
+
+        // --- SUB-COMPONENTE: QUIZLEVEL ---
+        function QuizLevel({ levelData, showFeedback }) {
+            return (
+                <div className="flex flex-col items-center max-w-2xl mx-auto w-full">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+                        {levelData.options.map((opt, idx) => (
+                            <button
+                                key={idx}
+                                onClick={() => {
+                                    if (idx === levelData.correct) {
+                                        showFeedback(true, levelData.expl);
+                                    } else {
+                                        showFeedback(false, "Non corretto. Ricorda: " + levelData.expl, 0);
+                                    }
+                                }}
+                                className="p-5 text-left border-2 border-slate-200 rounded-2xl hover:border-indigo-500 hover:bg-indigo-50/50 transition-all text-base font-semibold text-slate-700 flex items-center min-h-[72px]"
+                            >
+                                <span className="inline-block bg-slate-100 text-slate-500 w-8 h-8 text-center leading-8 rounded-full mr-3 font-bold text-xs shrink-0">
+                                    {String.fromCharCode(65 + idx)}
+                                </span>
+                                <span>{opt}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        // --- SUB-COMPONENTE: INTERACTIVEPRIMARIES ---
+        function InteractivePrimaries({ showFeedback }) {
+            const [selected, setSelected] = useState([]);
+            const options = [
+                { id: 'green', hex: '#22C55E', name: 'Verde' },
+                { id: 'red', hex: '#EF4444', name: 'Rosso' },
+                { id: 'purple', hex: '#A855F7', name: 'Viola' },
+                { id: 'yellow', hex: '#EAB308', name: 'Giallo' },
+                { id: 'orange', hex: '#F97316', name: 'Arancione' },
+                { id: 'blue', stroke: '#3B82F6', hex: '#3B82F6', name: 'Blu' }
+            ];
+
+            const handleSelect = (color) => {
+                if (selected.includes(color.id)) {
+                    setSelected(selected.filter(id => id !== color.id));
+                } else if (selected.length < 3) {
+                    const newSelected = [...selected, color.id];
+                    setSelected(newSelected);
+                    if (newSelected.length === 3) {
+                        const isCorrect = newSelected.includes('red') && newSelected.includes('yellow') && newSelected.includes('blue');
+                        if (isCorrect) {
+                            showFeedback(true, "Esatto! Rosso, Giallo e Blu sono i tre colori primari fondamentali del cerchio di Itten, indivisibili e puri.");
+                        } else {
+                            showFeedback(false, "Attenzione: hai selezionato dei colori secondari (nati da miscele). Riprova!", 0);
+                            setTimeout(() => setSelected([]), 1500);
+                        }
+                    }
+                }
+            };
+
+            return (
+                <div className="text-center">
+                    <p className="text-sm text-slate-500 mb-6 font-medium">Seleziona i 3 colori primari toccandoli:</p>
+                    <div className="grid grid-cols-3 gap-6 max-w-sm mx-auto">
+                        {options.map((color) => (
+                            <button
+                                key={color.id}
+                                onClick={() => handleSelect(color)}
+                                className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full mx-auto transition-all duration-300 shadow-md ${
+                                    selected.includes(color.id) ? 'ring-4 ring-offset-4 ring-slate-800 scale-110' : 'hover:scale-105'
+                                }`}
+                                style={{ backgroundColor: color.hex }}
+                                title={color.name}
+                            />
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        // --- SUB-COMPONENTE: INTERACTIVEMIX ---
+        function InteractiveMix({ showFeedback, levelData }) {
+            const [slot1, setSlot1] = useState(null);
+            const [slot2, setSlot2] = useState(null);
+
+            const handleSelect = (color) => {
+                if (!slot1) setSlot1(color);
+                else if (!slot2) {
+                  setSlot2(color);
+                  const isCorrect = levelData.req.includes(slot1.id) && levelData.req.includes(color.id) && slot1.id !== color.id;
+                  if (isCorrect) {
+                    showFeedback(true, `Perfetto! Mescolando ${slot1.name} e ${color.name} hai ottenuto il colore secondario richiesto.`);
+                  } else {
+                    showFeedback(false, `Miscela errata! Questi due colori non producono la tonalità attesa.`, 0);
+                    setTimeout(() => { setSlot1(null); setSlot2(null); }, 1500);
+                  }
+                }
+            };
+
+            return (
+                <div className="text-center flex flex-col items-center">
+                    <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-2xl inline-block">
+                        <h3 className="text-xs uppercase font-extrabold tracking-wider text-slate-500 mb-2">Obiettivo: Crea il {levelData.target.name}</h3>
+                        <div className="w-14 h-14 rounded-full mx-auto shadow-inner" style={{ backgroundColor: levelData.target.hex }}></div>
+                    </div>
+
+                    <div className="flex items-center gap-4 sm:gap-6 mb-8">
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-4 border-dashed border-slate-300 flex items-center justify-center bg-slate-50 font-bold" style={{ backgroundColor: slot1?.hex }}>
+                            {!slot1 && "Colore 1"}
+                        </div>
+                        <div className="text-2xl font-bold text-slate-300">+</div>
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-4 border-dashed border-slate-300 flex items-center justify-center bg-slate-50 font-bold" style={{ backgroundColor: slot2?.hex }}>
+                            {!slot2 && "Colore 2"}
+                        </div>
+                        <div className="text-2xl font-bold text-slate-300">=</div>
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-4 border-slate-200 bg-slate-100 flex items-center justify-center text-slate-450 text-lg">
+                            ?
+                        </div>
+                    </div>
+
+                    <div className="flex gap-4">
+                        {[COLORS.red, COLORS.blue, COLORS.yellow].map(color => (
+                            <button
+                                key={color.id} 
+                                onClick={() => handleSelect(color)}
+                                className="w-12 h-12 sm:w-14 sm:h-14 rounded-full shadow-md hover:scale-110"
+                                style={{ backgroundColor: color.hex }} 
+                            />
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        // --- SUB-COMPONENTE: INTERACTIVE COMPLEMENTARY ---
+        function InteractiveComplementary({ showFeedback, levelData }) {
+            return (
+                <div className="text-center flex flex-col items-center">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Colore di Partenza</span>
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full mb-8 shadow-xl ring-4 ring-slate-100 animate-pulse" style={{ backgroundColor: levelData.target.hex }}></div>
+                    
+                    <p className="text-sm font-semibold text-slate-500 mb-4">Scegli il suo complementare opposto:</p>
+                    <div className="flex gap-6">
+                        {[COLORS.green, COLORS.orange, COLORS.purple].map(color => (
+                            <div key={color.id} className="flex flex-col items-center gap-2">
+                                <button
+                                    onClick={() => {
+                                        if (color.id === levelData.correctId) {
+                                            showFeedback(true, "Esatto! Nel cerchio di Itten questi due colori sono situati in posizioni diametralmente opposte, manifestando il massimo contrasto.");
+                                        } else {
+                                            showFeedback(false, "Riprova: osserva mentalmente la posizione sul disco. Quale si trova sul lato opposto?", 0);
+                                        }
+                                    }}
+                                    className="w-14 h-14 sm:w-16 sm:h-16 rounded-full shadow-md hover:scale-110 transition-transform"
+                                    style={{ backgroundColor: color.hex }}
+                                />
+                                <span className="font-bold text-xs text-slate-500">{color.name}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        // --- SUB-COMPONENTE: EMOJIDRAWINGLAB ---
+        function EmojiDrawingLab({ isLoading, error, response, onAnalyze, onBack }) {
+            const canvasRef = useRef(null);
+            const [isDrawing, setIsDrawing] = useState(false);
+            const [brushColor, setBrushColor] = useState('#EAB308'); 
+            const [brushSize, setBrushSize] = useState(6);
+            const [isEraser, setIsEraser] = useState(false);
+
+            useEffect(() => {
+                const canvas = canvasRef.current;
+                if (canvas) {
+                  const ctx = canvas.getContext('2d');
+                  ctx.fillStyle = '#FFFFFF';
+                  ctx.fillRect(0, 0, canvas.width, canvas.height);
+                }
+            }, []);
+
+            const getCoordinates = (e) => {
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                if (e.touches && e.touches[0]) {
+                  return {
+                    x: e.touches[0].clientX - rect.left,
+                    y: e.touches[0].clientY - rect.top
+                  };
+                }
+                return {
+                  x: e.clientX - rect.left,
+                  y: e.clientY - rect.top
+                };
+            };
+
+            const startDrawing = (e) => {
+                e.preventDefault();
+                const { x, y } = getCoordinates(e);
+                const ctx = canvasRef.current.getContext('2d');
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineWidth = brushSize;
+                ctx.lineCap = 'round';
+                ctx.strokeStyle = isEraser ? '#FFFFFF' : brushColor;
+                setIsDrawing(true);
+            };
+
+            const draw = (e) => {
+                if (!isDrawing) return;
+                e.preventDefault();
+                const { x, y } = getCoordinates(e);
+                const ctx = canvasRef.current.getContext('2d');
+                ctx.lineTo(x, y);
+                ctx.stroke();
+            };
+
+            const paletteBrushes = [
+                { hex: '#EF4444', emotion: 'Rabbia / Passione' },
+                { hex: '#EAB308', emotion: 'Gioia / ...' },
+                { hex: '#3B82F6', emotion: 'Tristezza / Calma' },
+                { hex: '#22C55E', emotion: 'Equilibrio / ...' },
+                { hex: '#F97316', emotion: 'Entusiasmo / ...' },
+                { hex: '#A855F7', emotion: 'Mistero' },
+                { hex: '#000000', emotion: 'Autorità' },
+            ];
+
+            return (
+                <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100 animate-fade-in">
+                    <div className="bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 text-white p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div>
+                            <span className="text-xs uppercase font-extrabold tracking-widest text-pink-100 flex items-center gap-1.5">
+                                <Icon.Smile /> Gioco Didattico Interattivo
+                            </span>
+                            <h2 className="text-2xl font-bold mt-1">Laboratorio Disegno Emoji AI 🎨</h2>
+                            <p className="text-slate-100 text-sm mt-1">Disegna sulla lavagna a sinistra: l'AI interpreterà i tuoi tratti cromatici e darà vita ad un'emoji digitale!</p>
+                        </div>
+                        <span className="text-[10px] bg-white/20 text-white px-2.5 py-1 rounded font-bold uppercase tracking-wider shrink-0 text-center">
+                            Materiale didattico Prof. Delfino REGA
+                        </span>
+                    </div>
+
+                    <div className="p-6 sm:p-8 space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
+                            
+                            {/* AREA DI DISEGNO (SINISTRA) */}
+                            <div className="md:col-span-6 flex flex-col items-center">
+                                <div className="border-4 rounded-3xl overflow-hidden shadow-inner bg-white relative">
+                                    <canvas
+                                        ref={canvasRef}
+                                        width={320}
+                                        height={320}
+                                        onMouseDown={startDrawing}
+                                        onMouseMove={draw}
+                                        onMouseUp={() => setIsDrawing(false)}
+                                        onMouseLeave={() => setIsDrawing(false)}
+                                        onTouchStart={startDrawing}
+                                        onTouchMove={draw}
+                                        onTouchEnd={() => setIsDrawing(false)}
+                                        className="cursor-crosshair touch-none"
+                                    />
+                                </div>
+
+                                <div className="w-full mt-4 space-y-3 bg-slate-50 p-4 rounded-2xl border">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <span className="text-xs font-extrabold text-slate-400">Colore Pennello:</span>
+                                        <div className="flex gap-1.5 flex-wrap">
+                                            {paletteBrushes.map((brush) => (
+                                                <button
+                                                    key={brush.hex}
+                                                    onClick={() => { setBrushColor(brush.hex); setIsEraser(false); }}
+                                                    className="w-8 h-8 rounded-full border border-slate-300"
+                                                    style={{ backgroundColor: brush.hex }}
+                                                />
+                                            ))}
+                                            <button onClick={() => setIsEraser(true)} className="p-1.5 rounded-full border">
+                                                <Icon.Eraser />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-3 w-full mt-4">
+                                    <button 
+                                        onClick={() => {
+                                            const canvas = canvasRef.current;
+                                            const base64Png = canvas.toDataURL('image/png').split(',')[1];
+                                            onAnalyze(base64Png);
+                                        }}
+                                        disabled={isLoading}
+                                        className="flex-grow bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 px-6 rounded-2xl text-sm"
+                                    >
+                                        Analizza & Trasforma con AI ✨
+                                    </button>
+                                    <button onClick={() => {
+                                        const canvas = canvasRef.current;
+                                        const ctx = canvas.getContext('2d');
+                                        ctx.fillStyle = '#FFFFFF';
+                                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                                    }} className="p-3.5 rounded-2xl bg-slate-100 hover:bg-slate-200 border text-slate-600">
+                                        <Icon.Trash />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="md:col-span-6 space-y-6">
+                                <span className="text-sm font-bold text-slate-500 block uppercase tracking-wider">La tua Creazione AI</span>
+
+                                {isLoading && (
+                                    <div className="p-8 bg-slate-50/50 rounded-3xl border border-dashed min-h-[340px] flex flex-col items-center justify-center space-y-4 animate-pulse">
+                                        <div className="w-12 h-12 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin"></div>
+                                        <p className="text-slate-500 text-sm font-semibold">Itten sta interpretando il tuo disegno vettoriale...</p>
+                                    </div>
+                                )}
+
+                                {error && (
+                                    <div className="p-4 bg-red-50 border border-red-150 rounded-2xl flex gap-3 text-red-700 text-xs items-center">
+                                        <p className="font-semibold">{error}</p>
+                                    </div>
+                                )}
+
+                                {response && (
+                                    <div className="space-y-4">
+                                        <div className="p-6 bg-slate-100 rounded-3xl border flex flex-col items-center">
+                                            <div className="w-36 h-36 drop-shadow-xl" dangerouslySetInnerHTML={{ __html: response.svgOutput }} />
+                                            <h3 className="text-lg font-black text-indigo-950 mt-4">{response.emojiName}</h3>
+                                        </div>
+
+                                        <div className="p-4 bg-rose-50/60 border border-rose-100 rounded-2xl space-y-1.5">
+                                            <h4 className="text-xs uppercase font-extrabold text-rose-700">Analisi Psicologica Visiva</h4>
+                                            <p className="text-xs text-rose-950 font-medium">{response.psychologicalProfile}</p>
+                                        </div>
+
+                                        <div className="p-4 bg-indigo-50/50 border rounded-2xl space-y-1.5">
+                                            <h4 className="text-xs uppercase font-extrabold text-indigo-700 font-bold">Colori Rilevati</h4>
+                                            <ul className="text-xs text-indigo-900 font-medium space-y-1 list-disc pl-4">
+                                                {response.detectedColors.map((colorStr, i) => (
+                                                    <li key={i}>{colorStr}</li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end pt-4 border-t border-slate-100">
+                            <button onClick={onBack} className="border-2 border-slate-200 hover:bg-slate-50 font-bold py-3 px-6 rounded-2xl text-xs">
+                                Torna al Menu Principale
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // --- SUB-COMPONENTE: ITTENPUZZLELAB ---
+        function IttenPuzzleLab({ onBack, onVictory }) {
+            const PUZZLE_COLORS = [
+                { id: 0, name: "Giallo", hex: "#FFFF00", desc: "Colore primario luminoso, associato alla luce pura e all'energia solare." },
+                { id: 1, name: "Giallo-Arancio", hex: "#FFAA00", desc: "Colore terziario che unisce la radiosità del giallo e l'ottimismo dell'arancio." },
+                { id: 2, name: "Arancio", hex: "#FF7700", desc: "Colore secondario vivace, stimolante, sinonimo di entusiasmo e calore." },
+                { id: 3, name: "Rosso-Arancio", hex: "#FF3300", desc: "Colore terziario saturo, carico di energia termica ed espressività." },
+                { id: 4, name: "Rosso", hex: "#FF0000", desc: "Colore primario di eccezionale forza visiva, evoca passione e urgenza." },
+                { id: 5, name: "Rosso-Viola", hex: "#CC0066", desc: "Colore terziario che unisce la passionalità del rosso con il mistero del viola." },
+                { id: 6, name: "Viola", hex: "#7700AA", desc: "Colore secondario profondo, legato storicamente alla regalità e alla spiritualità." },
+                { id: 7, name: "Blu-Viola", hex: "#333399", desc: "Colore terziario scuro e notturno, bilancia freddezza e profondità." },
+                { id: 8, name: "Blu", hex: "#0000FF", desc: "Colore primario freddo per eccellenza, evoca pace, fiducia e stabilità." },
+                { id: 9, name: "Blu-Verde", hex: "#006666", desc: "Colore terziario raffinato, ricorda gli abissi oceanici e la quiete." },
+                { id: 10, name: "Verde", hex: "#009933", desc: "Colore secondario equilibrato e fresco, simbolo della natura e della rigenerazione." },
+                { id: 11, name: "Giallo-Verde", hex: "#99CC00", desc: "Colore terziario primaverile, infonde freschezza e dinamismo naturale." }
+            ];
+
+            const [placed, setPlaced] = useState(Array(12).fill(null));
+            const [tray, setTray] = useState([]);
+            const [selectedTrayId, setSelectedTrayId] = useState(null);
+            const [activeHint, setActiveHint] = useState(null);
+            const [hasWon, setHasWon] = useState(false);
+
+            useEffect(() => {
+                resetGame();
+            }, []);
+
+            const resetGame = () => {
+                setPlaced(Array(12).fill(null));
+                setSelectedTrayId(null);
+                setActiveHint(null);
+                setHasWon(false);
+                
+                const scrambled = [...PUZZLE_COLORS];
+                for (let i = scrambled.length - 1; i > 0; i--) {
+                  const j = Math.floor(Math.random() * (i + 1));
+                  [scrambled[i], scrambled[j]] = [scrambled[j], scrambled[i]];
+                }
+                setTray(scrambled);
+            };
+
+            const makeWedgePath = (index) => {
+                const cx = 125;
+                const cy = 125;
+                const r_o = 110; 
+                const r_i = 75;  
+
+                const centerAngle = -Math.PI / 2 + index * (Math.PI / 6);
+                const startAngle = centerAngle - Math.PI / 12;
+                const endAngle = centerAngle + Math.PI / 12;
+
+                const x_o1 = cx + r_o * Math.cos(startAngle);
+                const y_o1 = cy + r_o * Math.sin(startAngle);
+                const x_o2 = cx + r_o * Math.cos(endAngle);
+                const y_o2 = cy + r_o * Math.sin(endAngle);
+
+                const x_i1 = cx + r_i * Math.cos(startAngle);
+                const y_i1 = cy + r_i * Math.sin(startAngle);
+                const x_i2 = cx + r_i * Math.cos(endAngle);
+                const y_i2 = cy + r_i * Math.sin(endAngle);
+
+                return `M ${x_o1} ${y_o1} A ${r_o} ${r_o} 0 0 1 ${x_o2} ${y_o2} L ${x_i2} ${y_i2} A ${r_i} ${r_i} 0 0 0 ${x_i1} ${y_i1} Z`;
+            };
+
+            // Definizione locale degli handler di drag-and-drop
+            const handleDragStartLocal = (e, colorId) => {
+                e.dataTransfer.setData("text/plain", colorId.toString());
+            };
+
+            const handleDropLocal = (e, slotIndex) => {
+                e.preventDefault();
+                const draggedId = parseInt(e.dataTransfer.getData("text/plain"), 10);
+                attemptPlace(draggedId, slotIndex);
+            };
+
+            const attemptPlace = (colorId, slotIndex) => {
+                if (colorId === slotIndex) {
+                  const updatedPlaced = [...placed];
+                  updatedPlaced[slotIndex] = PUZZLE_COLORS[colorId];
+                  setPlaced(updatedPlaced);
+
+                  setTray(prev => prev.filter(item => item.id !== colorId));
+                  setSelectedTrayId(null);
+                  setActiveHint(PUZZLE_COLORS[colorId]);
+
+                  const win = updatedPlaced.every((item) => item !== null);
+                  if (win) {
+                    setHasWon(true);
+                    onVictory(200); 
+                  }
+                } else {
+                  setSelectedTrayId(null);
+                  setActiveHint({ error: true, desc: "La tonalità non corrisponde a questa posizione." });
+                }
+            };
+
+            return (
+                <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100 animate-fade-in">
+                    <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-yellow-500 text-white p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div>
+                            <span className="text-xs uppercase font-extrabold tracking-widest text-yellow-100 flex items-center gap-1.5">
+                                <Icon.Palette /> Laboratorio Didattico Pratico
+                            </span>
+                            <h2 className="text-2xl font-bold mt-1">Itten Color Puzzle 🧩</h2>
+                            <p className="text-slate-100 text-sm mt-1">Trascina le tinte o toccane una e premi sul cerchio per posizionarle!</p>
+                        </div>
+                        <span className="text-[10px] bg-white/20 text-white px-2.5 py-1 rounded font-bold uppercase tracking-wider shrink-0 text-center">
+                            Materiale didattico Prof. Delfino REGA
+                        </span>
+                    </div>
+
+                    <div className="p-6 sm:p-8 space-y-8">
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
+                            
+                            <div className="md:col-span-7 flex flex-col items-center justify-center">
+                                <div className="relative w-full max-w-sm aspect-square bg-slate-50 border p-4 rounded-3xl flex items-center justify-center shadow-inner">
+                                    <svg viewBox="0 0 250 250" className="w-full h-full drop-shadow-md">
+                                        <g>
+                                            <polygon points="125,50 189.95,162.5 189.95,87.5" fill="#F97316" stroke="#FFFFFF" strokeWidth="1" />
+                                            <polygon points="125,50 60.05,162.5 60.05,87.5" fill="#22C55E" stroke="#FFFFFF" strokeWidth="1" />
+                                            <polygon points="60.05,162.5 189.95,162.5 125,200" fill="#A855F7" stroke="#FFFFFF" strokeWidth="1" />
+                                            <polygon points="125,125 92.53,106.25 125,50 157.48,106.25" fill="#EAB308" stroke="#FFFFFF" strokeWidth="1" />
+                                            <polygon points="125,125 125,162.5 60.05,162.5 92.53,106.25" fill="#3B82F6" stroke="#FFFFFF" strokeWidth="1" />
+                                            <polygon points="125,125 157.48,106.25 189.95,162.5 125,162.5" fill="#EF4444" stroke="#FFFFFF" strokeWidth="1" />
+                                        </g>
+
+                                        <g>
+                                            {Array.from({ length: 12 }).map((_, idx) => {
+                                                const isCorrectlyPlaced = placed[idx] !== null;
+                                                return (
+                                                    <path
+                                                        key={idx}
+                                                        d={makeWedgePath(idx)}
+                                                        fill={isCorrectlyPlaced ? placed[idx].hex : '#E2E8F0'}
+                                                        stroke={isCorrectlyPlaced ? '#FFFFFF' : '#CBD5E1'}
+                                                        strokeWidth="1.5"
+                                                        className="transition-all duration-300 cursor-pointer"
+                                                        onDragOver={(e) => e.preventDefault()}
+                                                        onDrop={(e) => handleDropLocal(e, idx)}
+                                                        onClick={() => {
+                                                            if (placed[idx]) {
+                                                              setActiveHint(placed[idx]);
+                                                            } else if (selectedTrayId !== null) {
+                                                              attemptPlace(selectedTrayId, idx);
+                                                            }
+                                                        }}
+                                                    />
+                                                );
+                                            })}
+                                        </g>
+                                    </svg>
+
+                                    {hasWon && (
+                                        <div className="absolute inset-0 bg-white/95 rounded-3xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-500 z-10">
+                                            <Icon.Sparkles />
+                                            <h3 className="text-2xl font-black text-indigo-950">Completato con Successo! 🏆</h3>
+                                            <div className="bg-yellow-100 text-yellow-900 px-4 py-1 rounded-full text-xs font-black mt-4 animate-pulse">
+                                                +200 PUNTI BONUS ACCREDITATI
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="md:col-span-5 space-y-6">
+                                <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                                    <span className="text-sm font-bold text-slate-500 uppercase tracking-wider">Tasselli dei Colori ({tray.length}/12)</span>
+                                    <button onClick={resetGame} className="text-slate-500 hover:text-slate-800 p-1.5 bg-slate-100 rounded-xl">
+                                        <Icon.Refresh />
+                                    </button>
+                                </div>
+
+                                {tray.length > 0 && (
+                                    <div className="grid grid-cols-3 gap-3 max-h-[220px] overflow-y-auto p-2 bg-slate-50 rounded-2xl border">
+                                        {tray.map((color) => (
+                                            <div
+                                                key={color.id}
+                                                draggable
+                                                onDragStart={(e) => handleDragStartLocal(e, color.id)}
+                                                onClick={() => {
+                                                    setSelectedTrayId(color.id);
+                                                    setActiveHint(PUZZLE_COLORS[color.id]);
+                                                }}
+                                                className={`p-3 rounded-2xl flex flex-col items-center justify-center border cursor-grab transition-all ${
+                                                    selectedTrayId === color.id ? 'border-indigo-600 bg-indigo-50 shadow-md ring-2 ring-indigo-300' : 'border-slate-200 bg-white shadow-sm'
+                                                }`}
+                                            >
+                                                <div className="w-10 h-10 rounded-full shadow-inner mb-2" style={{ backgroundColor: color.hex }}></div>
+                                                <span className="text-[10px] font-black text-slate-700 text-center truncate w-full">{color.name}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                <div className="p-5 rounded-2xl border min-h-[120px] flex flex-col justify-center bg-slate-50">
+                                    {activeHint ? (
+                                        activeHint.error ? (
+                                            <div className="space-y-1">
+                                                <span className="text-xs uppercase font-extrabold text-red-600 font-bold">Errore</span>
+                                                <p className="text-xs text-red-950 font-semibold">{activeHint.desc}</p>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-1">
+                                                <span className="text-[10px] uppercase font-bold text-slate-400">Informazione Colore</span>
+                                                <h4 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                                                    <span className="inline-block w-3.5 h-3.5 rounded-full" style={{ backgroundColor: activeHint.hex }}></span>
+                                                    {activeHint.name}
+                                                </h4>
+                                                <p className="text-xs text-slate-600 leading-relaxed pt-1">{activeHint.desc}</p>
+                                            </div>
+                                        )
+                                    ) : (
+                                        <div className="text-center text-slate-400 space-y-2 py-2">
+                                            <p className="text-xs font-semibold leading-relaxed">
+                                                Trascina una tinta o selezionala con un click.
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end pt-4 border-t border-slate-100">
+                            <button onClick={onBack} className="border-2 border-slate-200 hover:bg-slate-50 font-bold py-3 px-6 rounded-2xl text-xs">
+                                Torna al Menu Principale
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Render dell'app React nel root div
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
